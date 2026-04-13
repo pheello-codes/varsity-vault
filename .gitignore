@@ -1,0 +1,50 @@
+# Varsity Vault .gitignore
+
+# Database and configuration files with secrets
+includes/config.php
+
+# Uploaded files (PDFs, etc.)
+uploads/
+uploads/notes/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js (if any)
+node_modules/
+npm-debug.log*
+
+# PHP Composer
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Database dumps (if any)
+*.sql
+!setup.sql  # Keep setup.sql for initial setup
