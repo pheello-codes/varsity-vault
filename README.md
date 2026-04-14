@@ -50,7 +50,14 @@ A complete web application for buying and selling university study notes, built 
      ```
    - Default XAMPP settings are already in the example file
 
-5. **Access the Application**
+5. **Configure Paystack**
+   - Set Paystack environment variables in your Apache or local environment:
+     - `PAYSTACK_SECRET_KEY`
+     - `PAYSTACK_PUBLIC_KEY`
+   - Alternatively, update `includes/config.php` directly with your Paystack keys
+   - The checkout flow uses Paystack inline payment and payout transfers in ZAR
+
+6. **Access the Application**
    - Open your web browser
    - Go to: `http://localhost/varsity-vault/`
    - You should see the Varsity Vault homepage

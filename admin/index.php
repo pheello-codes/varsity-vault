@@ -118,6 +118,7 @@ $top_notes = $top_notes_stmt->get_result();
         <button onclick="showTab('users')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="users">User Activity</button>
         <button onclick="showTab('reports')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="reports">Sales Reports</button>
         <button onclick="showTab('categories')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="categories">Manage Categories</button>
+        <a href="paystack-dashboard.php" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Paystack Dashboard</a>
     </nav>
 </div>
 
@@ -149,7 +150,7 @@ $top_notes = $top_notes_stmt->get_result();
                                     <div class="text-sm text-gray-500"><?php echo htmlspecialchars(substr($note['description'], 0, 50)) . (strlen($note['description']) > 50 ? '...' : ''); ?></div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['module_code']); ?></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['university']); ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R<?php echo number_format($note['price'], 2); ?></td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm text-gray-900"><?php echo htmlspecialchars($note['seller_name']); ?></div>
                                     <div class="text-sm text-gray-500"><?php echo htmlspecialchars($note['seller_email']); ?></div>
@@ -229,7 +230,7 @@ $top_notes = $top_notes_stmt->get_result();
         </div>
         <div class="bg-white rounded-lg shadow-md p-6">
             <h3 class="text-lg font-semibold text-gray-900">Total Revenue</h3>
-            <p class="text-3xl font-bold text-green-600">$<?php echo number_format($sales_data['total_revenue'] ?? 0, 2); ?></p>
+            <p class="text-3xl font-bold text-green-600">R<?php echo number_format($sales_data['total_revenue'] ?? 0, 2); ?></p>
         </div>
         <div class="bg-white rounded-lg shadow-md p-6">
             <h3 class="text-lg font-semibold text-gray-900">Average Rating</h3>
@@ -263,7 +264,7 @@ $top_notes = $top_notes_stmt->get_result();
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><?php echo htmlspecialchars($note['title']); ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['module_code']); ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['seller_name']); ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$<?php echo number_format($note['price'], 2); ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R<?php echo number_format($note['price'], 2); ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo $note['sales_count']; ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo number_format($note['avg_rating'] ?? 0, 1); ?>/5</td>
                         </tr>

@@ -68,7 +68,7 @@ if (isset($_SESSION['user_id'])) {
             <p class="text-gray-600"><strong>Seller:</strong> <?php echo htmlspecialchars($note['seller_name']); ?></p>
         </div>
 
-        <p class="text-4xl font-bold text-blue-600 mb-6">$<?php echo number_format($note['price'], 2); ?></p>
+        <p class="text-4xl font-bold text-blue-600 mb-6">R<?php echo number_format($note['price'], 2); ?></p>
 
         <p class="text-gray-700 mb-6"><?php echo nl2br(htmlspecialchars($note['description'])); ?></p>
 

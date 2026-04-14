@@ -86,7 +86,7 @@ $university_result = $conn->query($university_query);
                     <p class="text-gray-600 mb-1"><strong>Module:</strong> <?php echo htmlspecialchars($note['module_code']); ?></p>
                     <p class="text-gray-600 mb-1"><strong>University:</strong> <?php echo htmlspecialchars($note['university']); ?></p>
                     <p class="text-gray-600 mb-1"><strong>Seller:</strong> <?php echo htmlspecialchars($note['seller_name']); ?></p>
-                    <p class="text-2xl font-bold text-blue-600 mb-4">$<?php echo number_format($note['price'], 2); ?></p>
+                    <p class="text-2xl font-bold text-blue-600 mb-4">R<?php echo number_format($note['price'], 2); ?></p>
                     <a href="product.php?id=<?php echo $note['id']; ?>" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300 inline-block w-full text-center">View Details</a>
                 </div>
             </div>

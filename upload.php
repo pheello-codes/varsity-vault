@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
 
             <div class="mb-4">
-                <label for="price" class="block text-gray-700 font-semibold mb-2">Price ($) *</label>
+                <label for="price" class="block text-gray-700 font-semibold mb-2">Price (R) *</label>
                 <input type="number" id="price" name="price" step="0.01" min="0" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <p id="price-error" class="text-red-500 text-sm mt-1 hidden"></p>
             </div>

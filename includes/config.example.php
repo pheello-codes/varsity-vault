@@ -15,6 +15,13 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+// Paystack configuration
+$paystack_secret_key = getenv('PAYSTACK_SECRET_KEY') ?: '';
+$paystack_public_key = getenv('PAYSTACK_PUBLIC_KEY') ?: '';
+define('PAYSTACK_SECRET_KEY', $paystack_secret_key);
+define('PAYSTACK_PUBLIC_KEY', $paystack_public_key);
+define('PLATFORM_COMMISSION_RATE', 0.23);
+
 // Start session for all pages
 session_start();
 ?>
