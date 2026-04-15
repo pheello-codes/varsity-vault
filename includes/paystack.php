@@ -12,42 +12,58 @@ if (!defined('PAYSTACK_PUBLIC_KEY')) {
 }
 
 function paystackRequest($endpoint, $method = 'GET', $data = []) {
-    $url = 'https://api.paystack.co' . $endpoint;
-    $headers = [
-        'Authorization: Bearer ' . PAYSTACK_SECRET_KEY,
-        'Content-Type: application/json'
-    ];
+    try {
+        $url = 'https://api.paystack.co' . $endpoint;
+        $headers = [
+            'Authorization: Bearer ' . PAYSTACK_SECRET_KEY,
+            'Content-Type: application/json'
+        ];
 
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        $ch = curl_init($url);
+        if (!$ch) {
+            throw new Exception('Failed to initialize cURL');
+        }
 
-    if ($method === 'POST' || $method === 'PUT') {
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    }
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
-    $response = curl_exec($ch);
-    if ($response === false) {
-        $error = curl_error($ch);
+        if ($method === 'POST' || $method === 'PUT') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        }
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($response === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            error_log("Paystack API Error - $endpoint: $error");
+            return ['status' => false, 'message' => $error, 'data' => null];
+        }
+
         curl_close($ch);
-        return ['status' => false, 'message' => $error, 'data' => null];
+        $decoded = json_decode($response, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("Paystack JSON Error - $endpoint: " . json_last_error_msg());
+            return ['status' => false, 'message' => 'Unable to parse Paystack response.', 'data' => null];
+        }
+
+        if (!isset($decoded['status']) || !$decoded['status']) {
+            $message = $decoded['message'] ?? 'Paystack API error';
+            error_log("Paystack API Error - $endpoint: $message (HTTP: $httpCode)");
+            return ['status' => false, 'message' => $message, 'data' => $decoded];
+        }
+
+        return ['status' => true, 'data' => $decoded['data']];
+    } catch (Exception $e) {
+        error_log("Paystack function error - $endpoint: " . $e->getMessage());
+        return ['status' => false, 'message' => 'An unexpected error occurred while processing the payment.', 'data' => null];
     }
-
-    curl_close($ch);
-    $decoded = json_decode($response, true);
-
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        return ['status' => false, 'message' => 'Unable to parse Paystack response.', 'data' => null];
-    }
-
-    if (!isset($decoded['status']) || !$decoded['status']) {
-        $message = $decoded['message'] ?? 'Paystack API error';
-        return ['status' => false, 'message' => $message, 'data' => $decoded];
-    }
-
-    return ['status' => true, 'data' => $decoded['data']];
 }
 
 function getPaystackCallbackUrl() {
@@ -120,10 +136,41 @@ function initiateTransfer($recipientCode, $amount, $reason = 'Seller payout') {
 
 function getBankList() {
     if (empty(PAYSTACK_SECRET_KEY)) {
-        return ['status' => false, 'message' => 'Paystack secret key is not configured.'];
+        return ['status' => false, 'message' => 'Paystack secret key is not configured.', 'data' => getFallbackBankList()];
     }
 
-    return paystackRequest('/bank?currency=ZAR', 'GET');
+    $result = paystackRequest('/bank?currency=ZAR', 'GET');
+    
+    // If API fails, provide fallback list
+    if (!$result['status']) {
+        $fallback = getFallbackBankList();
+        if (!empty($fallback)) {
+            return ['status' => true, 'message' => 'Using fallback bank list', 'data' => $fallback];
+        }
+    }
+    
+    return $result;
+}
+
+function getFallbackBankList() {
+    // South African banks - fallback list for when API is unavailable
+    return [
+        ['name' => 'ABSA Bank Limited', 'code' => '632005'],
+        ['name' => 'Standard Bank South Africa', 'code' => '051001'],
+        ['name' => 'First National Bank (FNB)', 'code' => '250110'],
+        ['name' => 'Nedbank Limited', 'code' => '198765'],
+        ['name' => 'Capitec Bank', 'code' => '450105'],
+        ['name' => 'Investec Bank Limited', 'code' => '100009'],
+        ['name' => 'Bidvest Bank', 'code' => '462106'],
+        ['name' => 'African Bank Limited', 'code' => '820160'],
+        ['name' => 'HSBC Bank UK PLC', 'code' => '400171'],
+        ['name' => 'Wesbank', 'code' => '655005'],
+        ['name' => 'Bank of China Limited', 'code' => '304191'],
+        ['name' => 'Ubank', 'code' => '632009'],
+        ['name' => 'Grindrod Bank Limited', 'code' => '371447'],
+        ['name' => 'RMB (Rand Merchant Bank)', 'code' => '282831'],
+        ['name' => 'Discovery Bank', 'code' => '679002']
+    ];
 }
 
 function getPaystackBalance() {

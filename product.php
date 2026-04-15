@@ -28,6 +28,14 @@ $review_stmt->bind_param("i", $note_id);
 $review_stmt->execute();
 $reviews = $review_stmt->get_result();
 
+// Get average rating
+$avg_rating_stmt = $conn->prepare("SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE note_id = ?");
+$avg_rating_stmt->bind_param("i", $note_id);
+$avg_rating_stmt->execute();
+$rating_data = $avg_rating_stmt->get_result()->fetch_assoc();
+$avg_rating = $rating_data['avg_rating'] ?? 0;
+$review_count = $rating_data['review_count'] ?? 0;
+
 // Check if user has purchased this note
 $has_purchased = false;
 $has_reviewed = false;
@@ -44,9 +52,47 @@ if (isset($_SESSION['user_id'])) {
         $has_reviewed = $review_stmt->get_result()->num_rows > 0;
     }
 }
+
+$errors = [];
+$messages = [];
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'invalid_rating':
+            $errors[] = 'Invalid rating. Please select 1-5 stars.';
+            break;
+        case 'not_purchased':
+            $errors[] = 'You must purchase this note to leave a review.';
+            break;
+        case 'already_reviewed':
+            $errors[] = 'You have already reviewed this note.';
+            break;
+        case 'review_failed':
+            $errors[] = 'Failed to submit review. Please try again.';
+            break;
+    }
+}
+if (isset($_GET['success']) && $_GET['success'] == 'review_added') {
+    $messages[] = 'Your review has been added successfully.';
+}
 ?>
 
 <?php include 'includes/header.php'; ?>
+
+<?php foreach ($messages as $message): ?>
+    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+        <?php echo htmlspecialchars($message); ?>
+    </div>
+<?php endforeach; ?>
+
+<?php if (!empty($errors)): ?>
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+        <ul>
+            <?php foreach ($errors as $error): ?>
+                <li><?php echo htmlspecialchars($error); ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+<?php endif; ?>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
     <!-- Product Image -->
@@ -61,6 +107,19 @@ if (isset($_SESSION['user_id'])) {
     <!-- Product Details -->
     <div class="bg-white rounded-lg shadow-md p-6">
         <h1 class="text-3xl font-bold text-gray-900 mb-4"><?php echo htmlspecialchars($note['title']); ?></h1>
+
+        <?php if ($review_count > 0): ?>
+            <div class="flex items-center mb-4">
+                <div class="flex items-center">
+                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                        <svg class="w-5 h-5 <?php echo $i <= round($avg_rating) ? 'text-yellow-400' : 'text-gray-300'; ?>" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                        </svg>
+                    <?php endfor; ?>
+                </div>
+                <span class="ml-2 text-gray-600">(<?php echo number_format($avg_rating, 1); ?> out of 5, <?php echo $review_count; ?> reviews)</span>
+            </div>
+        <?php endif; ?>
 
         <div class="mb-4">
             <p class="text-gray-600"><strong>Module Code:</strong> <?php echo htmlspecialchars($note['module_code']); ?></p>
@@ -81,8 +140,10 @@ if (isset($_SESSION['user_id'])) {
         <?php endif; ?>
 
         <?php if ($has_purchased): ?>
-            <div class="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-                You have purchased this note. <a href="dashboard.php" class="underline">View in My Library</a>
+            <div class="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded space-y-3">
+                <p>You have purchased this note.</p>
+                <a href="download.php?note_id=<?php echo $note_id; ?>" class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition duration-300">Download Purchased PDF</a>
+                <div><a href="dashboard.php" class="underline">View in My Library</a></div>
             </div>
         <?php endif; ?>
     </div>

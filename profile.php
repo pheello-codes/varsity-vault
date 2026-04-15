@@ -17,6 +17,9 @@ $bankList = [];
 $bankListResult = getBankList();
 if ($bankListResult['status']) {
     $bankList = $bankListResult['data'];
+} elseif (!empty($bankListResult['data'])) {
+    // Use fallback list if available
+    $bankList = $bankListResult['data'];
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -180,9 +183,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </button>
         </form>
 
-        <?php if (empty($bankList)): ?>
-            <div class="mt-4 bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded">
-                Paystack bank list could not be loaded. Please check your Paystack configuration.
+        <?php if (!$bankListResult['status'] && empty($bankListResult['message']) || (strpos($bankListResult['message'] ?? '', 'fallback') !== false)): ?>
+            <div class="mt-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded">
+                Using an offline bank list. For the most up-to-date banks, ensure Paystack API is accessible.
             </div>
         <?php endif; ?>
     </div>

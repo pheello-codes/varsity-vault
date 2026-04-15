@@ -1,104 +1,165 @@
 <?php
 $page_title = "Shopping Cart";
 include 'includes/config.php';
+include 'includes/auth_check.php';
+
+$cartTableExists = tableExists('cart_items');
+$cartErrors = [];
+
+// Handle add to cart
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    if (!$cartTableExists) {
+        $cartErrors[] = 'Shopping cart is temporarily unavailable. Please try again later.';
+    } else {
+        if ($_POST['action'] == 'add_to_cart') {
+            $note_id = (int)$_POST['note_id'];
+            $quantity = max(1, (int)($_POST['quantity'] ?? 1));
+
+            // Check if note exists and is approved
+            $note_check = $conn->prepare("SELECT id FROM notes WHERE id = ? AND status = 'approved'");
+            $note_check->bind_param("i", $note_id);
+            $note_check->execute();
+
+            if ($note_check->get_result()->num_rows > 0) {
+                // Insert or update cart item
+                $cart_stmt = $conn->prepare("INSERT INTO cart_items (user_id, note_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + ?");
+                if ($cart_stmt) {
+                    $cart_stmt->bind_param("iiii", $_SESSION['user_id'], $note_id, $quantity, $quantity);
+                    $cart_stmt->execute();
+                }
+
+                header("Location: cart.php");
+                exit();
+            }
+        } elseif ($_POST['action'] == 'remove_from_cart') {
+            $note_id = (int)$_POST['note_id'];
+
+            $delete_stmt = $conn->prepare("DELETE FROM cart_items WHERE user_id = ? AND note_id = ?");
+            if ($delete_stmt) {
+                $delete_stmt->bind_param("ii", $_SESSION['user_id'], $note_id);
+                $delete_stmt->execute();
+            }
+
+            header("Location: cart.php");
+            exit();
+        } elseif ($_POST['action'] == 'update_quantity') {
+            $note_id = (int)$_POST['note_id'];
+            $quantity = max(1, (int)$_POST['quantity']);
+
+            if ($quantity > 0) {
+                $update_stmt = $conn->prepare("UPDATE cart_items SET quantity = ? WHERE user_id = ? AND note_id = ?");
+                if ($update_stmt) {
+                    $update_stmt->bind_param("iii", $quantity, $_SESSION['user_id'], $note_id);
+                    $update_stmt->execute();
+                }
+            } else {
+                $delete_stmt = $conn->prepare("DELETE FROM cart_items WHERE user_id = ? AND note_id = ?");
+                if ($delete_stmt) {
+                    $delete_stmt->bind_param("ii", $_SESSION['user_id'], $note_id);
+                    $delete_stmt->execute();
+                }
+            }
+
+            header("Location: cart.php");
+            exit();
+        }
+    }
+}
+
+$cart_items = [];
+if ($cartTableExists) {
+    $cart_stmt = $conn->prepare("SELECT ci.*, n.title, n.price, n.module_code, n.university FROM cart_items ci JOIN notes n ON ci.note_id = n.id WHERE ci.user_id = ? AND n.status = 'approved'");
+    if ($cart_stmt) {
+        $cart_stmt->bind_param("i", $_SESSION['user_id']);
+        $cart_stmt->execute();
+        $cart_items = $cart_stmt->get_result();
+    }
+}
+
+// Calculate total
+$total = 0;
+$valid_items = [];
+if ($cartTableExists && $cart_items) {
+    while ($item = $cart_items->fetch_assoc()) {
+        $item_total = $item['price'] * $item['quantity'];
+        $total += $item_total;
+        $valid_items[] = $item;
+    }
+} else {
+    $valid_items = [];
+}
+
 ?>
 
 <?php include 'includes/header.php'; ?>
 
+<?php if (!empty($cartErrors)): ?>
+    <div class="max-w-4xl mx-auto mb-6">
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            <ul class="list-disc list-inside">
+                <?php foreach ($cartErrors as $error): ?>
+                    <li><?php echo htmlspecialchars($error); ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    </div>
+<?php endif; ?>
+
 <div class="max-w-4xl mx-auto">
     <h1 class="text-3xl font-bold text-gray-900 mb-8">Shopping Cart</h1>
 
-    <div id="cart-content">
-        <!-- Cart items will be loaded here by JavaScript -->
+    <?php if (empty($valid_items)): ?>
         <div class="text-center py-12">
-            <p class="text-gray-500 text-lg">Loading cart...</p>
+            <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13l-1.1 5M7 13h10m0 0v8a2 2 0 01-2 2H9a2 2 0 01-2-2v-8z"></path>
+            </svg>
+            <h3 class="text-xl font-semibold text-gray-900 mb-2">Your cart is empty</h3>
+            <p class="text-gray-500 mb-6">Add some notes to get started!</p>
+            <a href="index.php" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">Browse Notes</a>
         </div>
-    </div>
-</div>
-
-<script>
-// Load cart from localStorage and display
-function loadCart() {
-    const cart = JSON.parse(localStorage.getItem('cart')) || [];
-    const cartContent = document.getElementById('cart-content');
-
-    if (cart.length === 0) {
-        cartContent.innerHTML = `
-            <div class="text-center py-12">
-                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.1 5H19M7 13l-1.1 5M7 13h10m0 0v8a2 2 0 01-2 2H9a2 2 0 01-2-2v-8z"></path>
-                </svg>
-                <h3 class="text-xl font-semibold text-gray-900 mb-2">Your cart is empty</h3>
-                <p class="text-gray-500 mb-6">Add some notes to get started!</p>
-                <a href="index.php" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">Browse Notes</a>
-            </div>
-        `;
-        return;
-    }
-
-    let total = 0;
-    let cartHTML = `
+    <?php else: ?>
         <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
             <div class="px-6 py-4 border-b border-gray-200">
                 <h2 class="text-xl font-semibold">Cart Items</h2>
             </div>
             <div class="divide-y divide-gray-200">
-    `;
-
-    cart.forEach((item, index) => {
-        const itemTotal = item.price * item.quantity;
-        total += itemTotal;
-
-        cartHTML += `
-            <div class="p-6 flex items-center justify-between">
-                <div class="flex-1">
-                    <h3 class="text-lg font-semibold text-gray-900">${item.title}</h3>
-                    <p class="text-gray-600">Quantity: ${item.quantity}</p>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-xl font-bold text-blue-600">R ${itemTotal.toFixed(2)}</span>
-                    <button onclick="removeFromCart(${index})" class="text-red-600 hover:text-red-800">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-
-    cartHTML += `
+                <?php foreach ($valid_items as $item): ?>
+                    <?php $item_total = $item['price'] * $item['quantity']; ?>
+                    <div class="p-6 flex items-center justify-between">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-gray-900"><?php echo htmlspecialchars($item['title']); ?></h3>
+                            <p class="text-gray-600"><?php echo htmlspecialchars($item['module_code']); ?> - <?php echo htmlspecialchars($item['university']); ?></p>
+                            <p class="text-gray-600">Quantity: <?php echo $item['quantity']; ?></p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-xl font-bold text-blue-600">R<?php echo number_format($item_total, 2); ?></span>
+                            <form method="POST" class="inline">
+                                <input type="hidden" name="action" value="remove_from_cart">
+                                <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
+                                <button type="submit" class="text-red-600 hover:text-red-800">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-md p-6">
             <div class="flex justify-between items-center text-2xl font-bold mb-6">
                 <span>Total:</span>
-                <span class="text-blue-600">R ${total.toFixed(2)}</span>
+                <span class="text-blue-600">R<?php echo number_format($total, 2); ?></span>
             </div>
             <form method="POST" action="checkout.php">
-                <input type="hidden" name="cart_items" value='${JSON.stringify(cart)}'>
                 <button type="submit" class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition duration-300 w-full text-lg font-semibold">
                     Proceed to Checkout
                 </button>
             </form>
         </div>
-    `;
-
-    cartContent.innerHTML = cartHTML;
-}
-
-// Remove item from cart
-function removeFromCart(index) {
-    let cart = JSON.parse(localStorage.getItem('cart')) || [];
-    cart.splice(index, 1);
-    localStorage.setItem('cart', JSON.stringify(cart));
-    updateCartCount();
-    loadCart();
-}
-
-// Load cart when page loads
-document.addEventListener('DOMContentLoaded', loadCart);
-</script>
+    <?php endif; ?>
+</div>
 
 <?php include 'includes/footer.php'; ?>

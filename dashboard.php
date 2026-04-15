@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 }
 
 // Get user's purchases
-$purchase_stmt = $conn->prepare("SELECT p.purchase_date, n.title, n.module_code, n.university, n.file_path FROM purchases p JOIN notes n ON p.note_id = n.id WHERE p.user_id = ? ORDER BY p.purchase_date DESC");
+$purchase_stmt = $conn->prepare("SELECT p.purchase_date, n.id AS note_id, n.title, n.module_code, n.university, n.file_path FROM purchases p JOIN notes n ON p.note_id = n.id WHERE p.user_id = ? ORDER BY p.purchase_date DESC");
 $purchase_stmt->bind_param("i", $_SESSION['user_id']);
 $purchase_stmt->execute();
 $purchases = $purchase_stmt->get_result();
@@ -238,7 +238,7 @@ $listings = $listing_stmt->get_result();
                         <p class="text-gray-600"><?php echo htmlspecialchars($purchase['module_code']); ?> - <?php echo htmlspecialchars($purchase['university']); ?></p>
                         <p class="text-sm text-gray-500">Purchased on <?php echo date('M j, Y', strtotime($purchase['purchase_date'])); ?></p>
                         <?php if ($purchase['file_path']): ?>
-                            <a href="<?php echo htmlspecialchars($purchase['file_path']); ?>" target="_blank" class="inline-block mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition duration-300">
+                            <a href="download.php?note_id=<?php echo $purchase['note_id']; ?>" target="_blank" class="inline-block mt-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition duration-300">
                                 Download PDF
                             </a>
                         <?php endif; ?>
@@ -257,6 +257,13 @@ $listings = $listing_stmt->get_result();
         <?php if ($listings->num_rows > 0): ?>
             <div class="space-y-4">
                 <?php while ($listing = $listings->fetch_assoc()): ?>
+                    <?php
+                    // Get rating for this note
+                    $rating_stmt = $conn->prepare("SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE note_id = ?");
+                    $rating_stmt->bind_param("i", $listing['id']);
+                    $rating_stmt->execute();
+                    $rating = $rating_stmt->get_result()->fetch_assoc();
+                    ?>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <h3 class="font-semibold text-lg"><?php echo htmlspecialchars($listing['title']); ?></h3>
                         <p class="text-gray-600"><?php echo htmlspecialchars($listing['module_code']); ?> - <?php echo htmlspecialchars($listing['university']); ?></p>
@@ -265,6 +272,18 @@ $listings = $listing_stmt->get_result();
                                 <?php echo ucfirst($listing['status']); ?>
                             </span>
                         </p>
+                        <?php if ($rating['review_count'] > 0): ?>
+                            <div class="flex items-center mt-2">
+                                <div class="flex items-center">
+                                    <?php for ($i = 1; $i <= 5; $i++): ?>
+                                        <svg class="w-4 h-4 <?php echo $i <= round($rating['avg_rating']) ? 'text-yellow-400' : 'text-gray-300'; ?>" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                                        </svg>
+                                    <?php endfor; ?>
+                                </div>
+                                <span class="ml-2 text-sm text-gray-600">(<?php echo number_format($rating['avg_rating'], 1); ?> from <?php echo $rating['review_count']; ?> review<?php echo $rating['review_count'] > 1 ? 's' : ''; ?>)</span>
+                            </div>
+                        <?php endif; ?>
                         <?php if ($listing['status'] == 'approved'): ?>
                             <p class="text-xs text-gray-400">Listed on <?php echo date('M j, Y', strtotime($listing['created_at'])); ?></p>
                         <?php endif; ?>

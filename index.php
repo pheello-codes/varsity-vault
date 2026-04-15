@@ -1,13 +1,11 @@
 <?php
+// Enable error reporting for debugging (remove in production)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 $page_title = "Varsity Vault - Buy and Sell Study Notes";
 include 'includes/config.php';
-
-// Handle logout
-if (isset($_GET['logout'])) {
-    session_destroy();
-    header("Location: index.php");
-    exit();
-}
 
 // Get search and filter parameters
 $search = isset($_GET['search']) ? $_GET['search'] : '';
@@ -19,9 +17,10 @@ $params = [];
 $types = '';
 
 if ($search) {
-    $query .= " AND n.module_code LIKE ?";
+    $query .= " AND (n.title LIKE ? OR n.module_code LIKE ?)";
     $params[] = "%$search%";
-    $types .= 's';
+    $params[] = "%$search%";
+    $types .= 'ss';
 }
 
 if ($university_filter) {
@@ -32,16 +31,31 @@ if ($university_filter) {
 
 $query .= " ORDER BY n.created_at DESC";
 
-$stmt = $conn->prepare($query);
-if ($params) {
-    $stmt->bind_param($types, ...$params);
-}
-$stmt->execute();
-$result = $stmt->get_result();
+try {
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        throw new Exception('Failed to prepare statement: ' . $conn->error);
+    }
 
-// Get unique universities for filter dropdown
-$university_query = "SELECT DISTINCT university FROM notes WHERE status = 'approved' ORDER BY university";
-$university_result = $conn->query($university_query);
+    if ($params) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    // Get unique universities for filter dropdown
+    $university_query = "SELECT DISTINCT university FROM notes WHERE status = 'approved' ORDER BY university";
+    $university_result = $conn->query($university_query);
+    if (!$university_result) {
+        throw new Exception('Failed to execute university query: ' . $conn->error);
+    }
+} catch (Exception $e) {
+    die('<div style="color: red; font-family: Arial, sans-serif; padding: 20px; border: 1px solid red; background-color: #ffe6e6; margin: 20px;">
+        <h2>Database Query Error</h2>
+        <p>' . htmlspecialchars($e->getMessage()) . '</p>
+        <p>Please try again later or contact support if the problem persists.</p>
+    </div>');
+}
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -75,6 +89,23 @@ $university_result = $conn->query($university_query);
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
     <?php if ($result->num_rows > 0): ?>
         <?php while ($note = $result->fetch_assoc()): ?>
+            <?php
+            // Get rating for this note
+            try {
+                $rating_stmt = $conn->prepare("SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE note_id = ?");
+                if (!$rating_stmt) {
+                    throw new Exception('Failed to prepare rating statement: ' . $conn->error);
+                }
+                $rating_stmt->bind_param("i", $note['id']);
+                $rating_stmt->execute();
+                $rating_result = $rating_stmt->get_result();
+                $rating = $rating_result->fetch_assoc();
+            } catch (Exception $e) {
+                // Log error and set default rating
+                error_log('Rating query error for note ' . $note['id'] . ': ' . $e->getMessage());
+                $rating = ['avg_rating' => 0, 'review_count' => 0];
+            }
+            ?>
             <div class="bg-white rounded-lg shadow-md overflow-hidden card-hover">
                 <div class="h-48 bg-gray-200 flex items-center justify-center">
                     <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,7 +117,19 @@ $university_result = $conn->query($university_query);
                     <p class="text-gray-600 mb-1"><strong>Module:</strong> <?php echo htmlspecialchars($note['module_code']); ?></p>
                     <p class="text-gray-600 mb-1"><strong>University:</strong> <?php echo htmlspecialchars($note['university']); ?></p>
                     <p class="text-gray-600 mb-1"><strong>Seller:</strong> <?php echo htmlspecialchars($note['seller_name']); ?></p>
-                    <p class="text-2xl font-bold text-blue-600 mb-4">R<?php echo number_format($note['price'], 2); ?></p>
+                    <p class="text-2xl font-bold text-blue-600 mb-2">R<?php echo number_format($note['price'], 2); ?></p>
+                    <?php if ($rating['review_count'] > 0): ?>
+                        <div class="flex items-center mb-4">
+                            <div class="flex items-center">
+                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <svg class="w-4 h-4 <?php echo $i <= round($rating['avg_rating']) ? 'text-yellow-400' : 'text-gray-300'; ?>" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+                                    </svg>
+                                <?php endfor; ?>
+                            </div>
+                            <span class="ml-2 text-sm text-gray-600">(<?php echo number_format($rating['avg_rating'], 1); ?>)</span>
+                        </div>
+                    <?php endif; ?>
                     <a href="product.php?id=<?php echo $note['id']; ?>" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-300 inline-block w-full text-center">View Details</a>
                 </div>
             </div>

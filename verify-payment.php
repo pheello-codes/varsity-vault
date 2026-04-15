@@ -23,31 +23,35 @@ if (!$verifyResult['status']) {
     if (empty($payment['status']) || $payment['status'] !== 'success') {
         $error = 'Payment verification failed or is not successful.';
     } else {
-        $metadata = $payment['metadata'] ?? [];
-        $cartItems = $metadata['cart_items'] ?? [];
+        // Get cart items from database instead of metadata
+        $cart_stmt = $conn->prepare("
+            SELECT ci.quantity, n.id, n.title, n.price, n.seller_id, u.email AS seller_email, u.name AS seller_name
+            FROM cart_items ci
+            JOIN notes n ON ci.note_id = n.id
+            JOIN users u ON n.seller_id = u.id
+            WHERE ci.user_id = ? AND n.status = 'approved'
+        ");
+        $cart_stmt->bind_param("i", $_SESSION['user_id']);
+        $cart_stmt->execute();
+        $cart_items_result = $cart_stmt->get_result();
 
-        if (empty($cartItems) || !is_array($cartItems)) {
-            $error = 'Unable to confirm cart items from payment metadata.';
+        $cartItems = [];
+        while ($item = $cart_items_result->fetch_assoc()) {
+            $cartItems[] = $item;
+        }
+
+        if (empty($cartItems)) {
+            $error = 'No cart items found for this user.';
         } else {
             $amountPaid = (isset($payment['amount']) ? (int) $payment['amount'] : 0);
             $totalExpected = 0;
             $validItems = [];
 
             foreach ($cartItems as $item) {
-                if (!isset($item['id']) || !isset($item['quantity'])) {
-                    continue;
-                }
-
-                $noteStmt = $conn->prepare("SELECT id, price, seller_id, status FROM notes WHERE id = ? AND status = 'approved'");
-                $noteStmt->bind_param('i', $item['id']);
-                $noteStmt->execute();
-                $note = $noteStmt->get_result()->fetch_assoc();
-
-                if ($note) {
-                    $quantity = max(1, (int) $item['quantity']);
-                    $note['quantity'] = $quantity;
-                    $validItems[] = $note;
-                    $totalExpected += $note['price'] * $quantity;
+                $quantity = max(1, (int) $item['quantity']);
+                $item['quantity'] = $quantity;
+                $validItems[] = $item;
+                $totalExpected += $item['price'] * $quantity;
                 }
             }
 
@@ -56,7 +60,12 @@ if (!$verifyResult['status']) {
             } else {
                 $conn->begin_transaction();
                 try {
+                    $order_html_items = '';
+                    $buyer_name = $_SESSION['user_name'] ?? 'Student';
+                    $purchase_count = 0;
+
                     foreach ($validItems as $item) {
+                        $order_html_items .= '<p style="margin:6px 0;">' . htmlspecialchars($item['title']) . ' - R' . number_format($item['price'], 2) . ' x ' . $item['quantity'] . '</p>';
                         $checkStmt = $conn->prepare("SELECT id FROM purchases WHERE user_id = ? AND note_id = ?");
                         $checkStmt->bind_param('ii', $_SESSION['user_id'], $item['id']);
                         $checkStmt->execute();
@@ -74,10 +83,33 @@ if (!$verifyResult['status']) {
                             $earningStmt = $conn->prepare("INSERT INTO seller_earnings (seller_id, purchase_id, note_id, total_amount, commission_amount, seller_amount) VALUES (?, ?, ?, ?, ?, ?)");
                             $earningStmt->bind_param('iiiddd', $item['seller_id'], $purchaseId, $item['id'], $totalAmount, $commissionAmount, $sellerAmount);
                             $earningStmt->execute();
+
+                            send_template_email('sale_notification', $item['seller_email'], [
+                                'seller_name' => $item['seller_name'],
+                                'note_title' => $item['title'],
+                                'amount' => $totalAmount,
+                                'buyer_name' => $buyer_name,
+                            ]);
+
+                            $purchase_count++;
                         }
                     }
 
+                    if ($purchase_count > 0) {
+                        send_template_email('purchase_confirmation', $userEmail, [
+                            'name' => $buyer_name,
+                            'total' => $totalExpected,
+                            'items_html' => $order_html_items,
+                        ]);
+                    }
+
                     $conn->commit();
+                    
+                    // Clear the user's cart after successful purchase
+                    $clear_cart_stmt = $conn->prepare("DELETE FROM cart_items WHERE user_id = ?");
+                    $clear_cart_stmt->bind_param("i", $_SESSION['user_id']);
+                    $clear_cart_stmt->execute();
+                    
                     $success = true;
                 } catch (Exception $e) {
                     $conn->rollback();

@@ -32,9 +32,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
 
     $status = ($action == 'approve') ? 'approved' : 'rejected';
 
+    $note_details_stmt = $conn->prepare("SELECT n.title, u.email AS seller_email, u.name AS seller_name FROM notes n JOIN users u ON n.seller_id = u.id WHERE n.id = ? LIMIT 1");
+    $note_details_stmt->bind_param("i", $note_id);
+    $note_details_stmt->execute();
+    $note_details = $note_details_stmt->get_result()->fetch_assoc();
+
     $update_stmt = $conn->prepare("UPDATE notes SET status = ? WHERE id = ?");
     $update_stmt->bind_param("si", $status, $note_id);
     $update_stmt->execute();
+
+    if ($update_stmt->affected_rows >= 0 && $note_details) {
+        if ($action === 'approve') {
+            send_template_email('note_approved', $note_details['seller_email'], [
+                'seller_name' => $note_details['seller_name'],
+                'note_title' => $note_details['title'],
+            ]);
+        } else {
+            send_template_email('note_rejected', $note_details['seller_email'], [
+                'seller_name' => $note_details['seller_name'],
+                'note_title' => $note_details['title'],
+                'reason' => 'The uploaded note did not meet our platform guidelines. Please update and resubmit.',
+            ]);
+        }
+    }
 
     $message = "Note " . ($action == 'approve' ? 'approved' : 'rejected') . " successfully.";
 }
@@ -49,6 +69,18 @@ $pending_stmt = $conn->prepare("
 ");
 $pending_stmt->execute();
 $pending_notes = $pending_stmt->get_result();
+
+$pending_count_stmt = $conn->prepare("SELECT COUNT(*) AS pending_approvals FROM notes WHERE status = 'pending'");
+$pending_count_stmt->execute();
+$pending_approvals = $pending_count_stmt->get_result()->fetch_assoc()['pending_approvals'] ?? 0;
+
+$pending_withdrawals_stmt = $conn->prepare("SELECT COUNT(*) AS pending_withdrawals FROM withdrawals WHERE status IN ('processing', 'pending_funds')");
+$pending_withdrawals_stmt->execute();
+$pending_withdrawals = $pending_withdrawals_stmt->get_result()->fetch_assoc()['pending_withdrawals'] ?? 0;
+
+$platform_revenue_stmt = $conn->prepare("SELECT COALESCE(SUM(commission_amount), 0) AS platform_revenue FROM seller_earnings");
+$platform_revenue_stmt->execute();
+$platform_revenue = $platform_revenue_stmt->get_result()->fetch_assoc()['platform_revenue'] ?? 0;
 
 // Get user activity data
 $user_activity_stmt = $conn->prepare("
@@ -95,7 +127,17 @@ $top_notes_stmt = $conn->prepare("
     LIMIT 10
 ");
 $top_notes_stmt->execute();
-$top_notes = $top_notes_stmt->get_result();
+$top_notes_result = $top_notes_stmt->get_result();
+$top_notes = [];
+while ($row = $top_notes_result->fetch_assoc()) {
+    $top_notes[] = $row;
+}
+$chart_labels = json_encode(array_map(function ($item) {
+    return htmlspecialchars($item['title'], ENT_QUOTES);
+}, $top_notes));
+$chart_values = json_encode(array_map(function ($item) {
+    return (int) ($item['sales_count'] ?? 0);
+}, $top_notes));
 ?>
 
 <?php include '../includes/header.php'; ?>
@@ -110,6 +152,25 @@ $top_notes = $top_notes_stmt->get_result();
         <?php echo htmlspecialchars($message); ?>
     </div>
 <?php endif; ?>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <p class="text-sm text-gray-500">Total Sales</p>
+        <p class="text-3xl font-bold text-blue-600"><?php echo $sales_data['total_purchases'] ?? 0; ?></p>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <p class="text-sm text-gray-500">Pending Approvals</p>
+        <p class="text-3xl font-bold text-yellow-600"><?php echo $pending_approvals; ?></p>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <p class="text-sm text-gray-500">Pending Withdrawals</p>
+        <p class="text-3xl font-bold text-red-600"><?php echo $pending_withdrawals; ?></p>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <p class="text-sm text-gray-500">Platform Revenue</p>
+        <p class="text-3xl font-bold text-green-600">R<?php echo number_format($platform_revenue, 2); ?></p>
+    </div>
+</div>
 
 <!-- Tab Navigation -->
 <div class="mb-6">
@@ -158,7 +219,7 @@ $top_notes = $top_notes_stmt->get_result();
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$<?php echo number_format($note['price'], 2); ?></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <?php if ($note['file_path']): ?>
-                                        <a href="<?php echo htmlspecialchars($note['file_path']); ?>" target="_blank" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition duration-300 inline-block mr-2">View PDF</a>
+                                        <a href="../download.php?note_id=<?php echo $note['id']; ?>" target="_blank" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition duration-300 inline-block mr-2">View PDF</a>
                                     <?php endif; ?>
                                     <form method="POST" class="inline">
                                         <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
@@ -246,6 +307,9 @@ $top_notes = $top_notes_stmt->get_result();
         <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-xl font-semibold">Top-Selling Notes</h2>
         </div>
+        <div class="p-6">
+            <canvas id="salesChart" class="w-full h-64"></canvas>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-gray-50">
@@ -259,7 +323,7 @@ $top_notes = $top_notes_stmt->get_result();
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                    <?php while ($note = $top_notes->fetch_assoc()): ?>
+                    <?php foreach ($top_notes as $note): ?>
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><?php echo htmlspecialchars($note['title']); ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['module_code']); ?></td>
@@ -268,7 +332,7 @@ $top_notes = $top_notes_stmt->get_result();
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo $note['sales_count']; ?></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo number_format($note['avg_rating'] ?? 0, 1); ?>/5</td>
                         </tr>
-                    <?php endwhile; ?>
+                    <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
@@ -304,6 +368,38 @@ function showTab(tabName) {
     activeButton.classList.add('active', 'bg-blue-600', 'text-white');
     activeButton.classList.remove('bg-gray-200', 'text-gray-700');
 }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('salesChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: <?php echo $chart_labels ?? '[]'; ?>,
+                datasets: [{
+                    label: 'Sales Count',
+                    data: <?php echo $chart_values ?? '[]'; ?>,
+                    backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 }
+                    }
+                }
+            }
+        });
+    }
 </script>
 
 <?php include '../includes/footer.php'; ?>

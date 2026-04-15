@@ -4,35 +4,30 @@ include 'includes/config.php';
 include 'includes/auth_check.php';
 include 'includes/paystack.php';
 
-// Get cart items from localStorage (sent via POST)
-$cart_items = isset($_POST['cart_items']) ? json_decode($_POST['cart_items'], true) : [];
-
-if (empty($cart_items)) {
-    header("Location: cart.php");
-    exit();
-}
+// Get cart items from database
+$cart_stmt = $conn->prepare("
+    SELECT ci.*, n.title, n.price, n.module_code, n.university
+    FROM cart_items ci
+    JOIN notes n ON ci.note_id = n.id
+    WHERE ci.user_id = ? AND n.status = 'approved'
+");
+$cart_stmt->bind_param("i", $_SESSION['user_id']);
+$cart_stmt->execute();
+$cart_items = $cart_stmt->get_result();
 
 // Calculate total and validate order items
 $total = 0;
 $valid_items = [];
 
-foreach ($cart_items as $item) {
-    $stmt = $conn->prepare("SELECT id, title, price FROM notes WHERE id = ? AND status = 'approved'");
-    $stmt->bind_param("i", $item['id']);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        $note = $result->fetch_assoc();
-        $quantity = max(1, (int) $item['quantity']);
-        $note['quantity'] = $quantity;
-        $valid_items[] = $note;
-        $total += $note['price'] * $quantity;
-    }
+while ($item = $cart_items->fetch_assoc()) {
+    $quantity = max(1, (int) $item['quantity']);
+    $item['quantity'] = $quantity;
+    $valid_items[] = $item;
+    $total += $item['price'] * $quantity;
 }
 
 if (empty($valid_items)) {
-    header("Location: index.php");
+    header("Location: cart.php");
     exit();
 }
 
@@ -45,7 +40,15 @@ $paystackInit = null;
 $paystackReference = '';
 
 if (!empty($userEmail)) {
-    $paystackInit = initializePayment($userEmail, $total, ['cart_items' => $cart_items]);
+    // Prepare cart items for metadata
+    $cart_metadata = array_map(function($item) {
+        return [
+            'id' => $item['note_id'],
+            'quantity' => $item['quantity']
+        ];
+    }, $valid_items);
+    
+    $paystackInit = initializePayment($userEmail, $total, ['cart_items' => $cart_metadata]);
     if ($paystackInit['status']) {
         $paystackReference = $paystackInit['data']['reference'];
     } else {

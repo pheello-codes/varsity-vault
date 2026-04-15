@@ -50,7 +50,22 @@ A complete web application for buying and selling university study notes, built 
      ```
    - Default XAMPP settings are already in the example file
 
-5. **Configure Paystack**
+5. **Set Up Tailwind CSS for Production**
+   - **Option 1: Quick Setup (Recommended for immediate use)**
+     - The application is already configured to use a production-ready Tailwind setup
+     - Run the build script: `build-css.bat` (double-click the file)
+     - This will compile Tailwind CSS for production use
+   - **Option 2: Manual Setup**
+     - Install Node.js from https://nodejs.org/
+     - Open command prompt in the project folder
+     - Run: `npm install`
+     - Run: `npm run build-css-prod` (for production build)
+     - Or: `npm run build-css` (for development with auto-rebuild)
+   - **Option 3: If you see CDN warnings**
+     - The warning about `cdn.tailwindcss.com` is just informational
+     - The application will work fine, but for optimal performance, use Option 1 or 2 above
+
+6. **Configure Paystack**
    - Set Paystack environment variables in your Apache or local environment:
      - `PAYSTACK_SECRET_KEY`
      - `PAYSTACK_PUBLIC_KEY`
