@@ -43,8 +43,8 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // Get unique universities for filter dropdown
-    $university_query = "SELECT DISTINCT university FROM notes WHERE status = 'approved' ORDER BY university";
+    // Get universities for filter dropdown
+    $university_query = "SELECT id, name FROM universities ORDER BY name";
     $university_result = $conn->query($university_query);
     if (!$university_result) {
         throw new Exception('Failed to execute university query: ' . $conn->error);
@@ -67,26 +67,26 @@ try {
 
 <!-- Search and Filter -->
 <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-    <form method="GET" class="flex flex-col md:flex-row gap-4">
+    <form method="GET" class="flex flex-col sm:flex-row sm:items-end gap-4">
         <div class="flex-1">
-            <input type="text" name="search" placeholder="Search by module code..." value="<?php echo htmlspecialchars($search); ?>" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <input type="text" name="search" placeholder="Search by module code..." value="<?php echo htmlspecialchars($search); ?>" class="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
         </div>
-        <div class="md:w-64">
-            <select name="university" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <div class="w-full sm:w-64">
+            <select name="university" class="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <option value="">All Universities</option>
                 <?php while ($uni = $university_result->fetch_assoc()): ?>
-                    <option value="<?php echo htmlspecialchars($uni['university']); ?>" <?php echo $university_filter == $uni['university'] ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($uni['university']); ?>
+                    <option value="<?php echo htmlspecialchars($uni['name']); ?>" <?php echo $university_filter === $uni['name'] ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($uni['name']); ?>
                     </option>
                 <?php endwhile; ?>
             </select>
         </div>
-        <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-300">Search</button>
+        <button type="submit" class="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300 text-base font-semibold">Search</button>
     </form>
 </div>
 
 <!-- Notes Grid -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
     <?php if ($result->num_rows > 0): ?>
         <?php while ($note = $result->fetch_assoc()): ?>
             <?php

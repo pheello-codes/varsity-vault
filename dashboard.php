@@ -143,6 +143,14 @@ $listings = $listing_stmt->get_result();
     <p class="text-gray-600 mt-2">Manage your purchases, listings, and seller payouts.</p>
 </div>
 
+<div class="overflow-x-auto mb-8">
+    <nav class="flex min-w-max gap-3 border-b border-gray-200 pb-3">
+        <a href="#wallet-section" class="whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2 text-white shadow-sm hover:bg-blue-700">Earnings</a>
+        <a href="#library-section" class="whitespace-nowrap rounded-lg bg-gray-100 px-4 py-2 text-gray-800 hover:bg-gray-200">My Library</a>
+        <a href="#listings-section" class="whitespace-nowrap rounded-lg bg-gray-100 px-4 py-2 text-gray-800 hover:bg-gray-200">My Listings</a>
+    </nav>
+</div>
+
 <?php foreach ($messages as $message): ?>
     <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
         <?php echo htmlspecialchars($message); ?>
@@ -160,7 +168,7 @@ $listings = $listing_stmt->get_result();
 <?php endif; ?>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-    <div class="bg-white rounded-lg shadow-md p-6">
+    <div id="earnings-section" class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-2xl font-semibold mb-4">Seller Wallet</h2>
         <p class="text-gray-600 mb-6">Available balance is calculated from your approved note sales minus your requested withdrawals.</p>
 
@@ -227,7 +235,7 @@ $listings = $listing_stmt->get_result();
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <div class="bg-white rounded-lg shadow-md p-6">
+<div id="library-section" class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-2xl font-semibold mb-6">My Library</h2>
 
         <?php if ($purchases->num_rows > 0): ?>
@@ -251,7 +259,7 @@ $listings = $listing_stmt->get_result();
         <?php endif; ?>
     </div>
 
-    <div class="bg-white rounded-lg shadow-md p-6">
+    <div id="listings-section" class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-2xl font-semibold mb-6">My Listings</h2>
 
         <?php if ($listings->num_rows > 0): ?>
@@ -287,11 +295,11 @@ $listings = $listing_stmt->get_result();
                         <?php if ($listing['status'] == 'approved'): ?>
                             <p class="text-xs text-gray-400">Listed on <?php echo date('M j, Y', strtotime($listing['created_at'])); ?></p>
                         <?php endif; ?>
-                        <div class="mt-3 flex gap-2">
-                            <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this note? This action cannot be undone.');">
+                        <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <form method="POST" class="w-full sm:w-auto" onsubmit="return confirm('Are you sure you want to delete this note? This action cannot be undone.');">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="note_id" value="<?php echo $listing['id']; ?>">
-                                <button type="submit" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition duration-300">Delete</button>
+                                <button type="submit" class="w-full sm:w-auto bg-red-600 text-white px-4 py-3 rounded-lg text-sm hover:bg-red-700 transition duration-300">Delete</button>
                             </form>
                         </div>
                     </div>

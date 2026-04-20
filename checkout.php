@@ -70,7 +70,7 @@ if (!empty($userEmail)) {
         </div>
     <?php endif; ?>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div class="bg-white rounded-lg shadow-md p-6">
             <h2 class="text-2xl font-semibold mb-6">Order Summary</h2>
             <div class="space-y-4">
@@ -99,7 +99,7 @@ if (!empty($userEmail)) {
             </div>
 
             <?php if (!empty($paystackReference) && empty($error)): ?>
-                <button id="paystack-button" class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition duration-300 w-full text-lg font-semibold">
+                <button id="paystack-button" class="w-full bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition duration-300 text-lg font-semibold">
                     Pay R<?php echo number_format($total, 2); ?> with Paystack
                 </button>
             <?php else: ?>

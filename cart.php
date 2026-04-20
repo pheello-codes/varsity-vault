@@ -105,7 +105,7 @@ if ($cartTableExists && $cart_items) {
     </div>
 <?php endif; ?>
 
-<div class="max-w-4xl mx-auto">
+<div class="max-w-4xl mx-auto pb-32">
     <h1 class="text-3xl font-bold text-gray-900 mb-8">Shopping Cart</h1>
 
     <?php if (empty($valid_items)): ?>
@@ -125,22 +125,33 @@ if ($cartTableExists && $cart_items) {
             <div class="divide-y divide-gray-200">
                 <?php foreach ($valid_items as $item): ?>
                     <?php $item_total = $item['price'] * $item['quantity']; ?>
-                    <div class="p-6 flex items-center justify-between">
+                    <div class="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200">
                         <div class="flex-1">
                             <h3 class="text-lg font-semibold text-gray-900"><?php echo htmlspecialchars($item['title']); ?></h3>
                             <p class="text-gray-600"><?php echo htmlspecialchars($item['module_code']); ?> - <?php echo htmlspecialchars($item['university']); ?></p>
-                            <p class="text-gray-600">Quantity: <?php echo $item['quantity']; ?></p>
+                            <p class="text-gray-600">Price: R<?php echo number_format($item['price'], 2); ?></p>
                         </div>
-                        <div class="flex items-center space-x-4">
+                        <div class="flex flex-col gap-3 items-start sm:items-end">
+                            <div class="flex items-center gap-2">
+                                <form method="POST" class="inline-flex">
+                                    <input type="hidden" name="action" value="update_quantity">
+                                    <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
+                                    <input type="hidden" name="quantity" value="<?php echo max(1, $item['quantity'] - 1); ?>">
+                                    <button type="submit" class="inline-flex items-center justify-center w-11 h-11 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">-</button>
+                                </form>
+                                <span class="min-w-[44px] text-center text-lg font-semibold"><?php echo $item['quantity']; ?></span>
+                                <form method="POST" class="inline-flex">
+                                    <input type="hidden" name="action" value="update_quantity">
+                                    <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
+                                    <input type="hidden" name="quantity" value="<?php echo $item['quantity'] + 1; ?>">
+                                    <button type="submit" class="inline-flex items-center justify-center w-11 h-11 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">+</button>
+                                </form>
+                            </div>
                             <span class="text-xl font-bold text-blue-600">R<?php echo number_format($item_total, 2); ?></span>
                             <form method="POST" class="inline">
                                 <input type="hidden" name="action" value="remove_from_cart">
                                 <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
-                                <button type="submit" class="text-red-600 hover:text-red-800">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                </button>
+                                <button type="submit" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg transition duration-300">Remove</button>
                             </form>
                         </div>
                     </div>
@@ -148,16 +159,18 @@ if ($cartTableExists && $cart_items) {
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex justify-between items-center text-2xl font-bold mb-6">
-                <span>Total:</span>
-                <span class="text-blue-600">R<?php echo number_format($total, 2); ?></span>
+        <div class="bg-white rounded-lg shadow-md p-6 sticky bottom-0 left-0 right-0 z-10">
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center justify-between text-2xl font-bold">
+                    <span>Total:</span>
+                    <span class="text-blue-600">R<?php echo number_format($total, 2); ?></span>
+                </div>
+                <form method="POST" action="checkout.php">
+                    <button type="submit" class="w-full bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition duration-300 text-lg font-semibold">
+                        Proceed to Checkout
+                    </button>
+                </form>
             </div>
-            <form method="POST" action="checkout.php">
-                <button type="submit" class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition duration-300 w-full text-lg font-semibold">
-                    Proceed to Checkout
-                </button>
-            </form>
         </div>
     <?php endif; ?>
 </div>

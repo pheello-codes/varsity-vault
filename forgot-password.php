@@ -27,10 +27,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insert->execute();
 
             $reset_url = SITE_URL . '/reset-password.php?token=' . urlencode($token);
-            send_template_email('password_reset', $email, [
+            $email_sent = send_template_email('password_reset', $email, [
                 'name' => $user['name'] ?? 'Student',
                 'reset_url' => $reset_url,
             ]);
+            
+            if (!$email_sent) {
+                error_log("Failed to send password reset email to $email");
+            }
         }
 
         $success = true;

@@ -3,6 +3,11 @@ $page_title = "Upload Notes";
 include 'includes/config.php';
 include 'includes/auth_check.php';
 
+// Get universities
+$universities_stmt = $conn->prepare("SELECT id, name FROM universities ORDER BY name");
+$universities_stmt->execute();
+$universities = $universities_stmt->get_result();
+
 $errors = [];
 $success = false;
 
@@ -84,23 +89,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <?php endif; ?>
 
     <div class="bg-white rounded-lg shadow-md p-6">
-        <form method="POST" enctype="multipart/form-data" onsubmit="return validateUploadForm()">
-            <div class="mb-4">
+        <form method="POST" enctype="multipart/form-data" onsubmit="return validateUploadForm()" class="space-y-6">
+            <div>
                 <label for="title" class="block text-gray-700 font-semibold mb-2">Title *</label>
-                <input type="text" id="title" name="title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <input type="text" id="title" name="title" required class="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <p id="title-error" class="text-red-500 text-sm mt-1 hidden"></p>
+            </div>
+
+            <div class="mb-4">
+                <label for="university" class="block text-gray-700 font-semibold mb-2">University *</label>
+                <select id="university" name="university" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">Select University</option>
+                    <?php while ($uni = $universities->fetch_assoc()): ?>
+                        <option value="<?php echo htmlspecialchars($uni['name']); ?>"><?php echo htmlspecialchars($uni['name']); ?></option>
+                    <?php endwhile; ?>
+                </select>
+                <p id="university-error" class="text-red-500 text-sm mt-1 hidden"></p>
             </div>
 
             <div class="mb-4">
                 <label for="module_code" class="block text-gray-700 font-semibold mb-2">Module Code *</label>
                 <input type="text" id="module_code" name="module_code" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 <p id="module-error" class="text-red-500 text-sm mt-1 hidden"></p>
-            </div>
-
-            <div class="mb-4">
-                <label for="university" class="block text-gray-700 font-semibold mb-2">University *</label>
-                <input type="text" id="university" name="university" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <p id="university-error" class="text-red-500 text-sm mt-1 hidden"></p>
             </div>
 
             <div class="mb-4">

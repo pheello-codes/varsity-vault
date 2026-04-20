@@ -37,26 +37,86 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
     $note_details_stmt->execute();
     $note_details = $note_details_stmt->get_result()->fetch_assoc();
 
-    $update_stmt = $conn->prepare("UPDATE notes SET status = ? WHERE id = ?");
-    $update_stmt->bind_param("si", $status, $note_id);
-    $update_stmt->execute();
+    if ($action === 'reject') {
+        if (empty($_POST['rejection_reason'])) {
+            $message = "Rejection reason is required.";
+        } else {
+            $rejection_reason = trim($_POST['rejection_reason']);
+            $update_stmt = $conn->prepare("UPDATE notes SET status = ?, rejection_reason = ? WHERE id = ?");
+            $update_stmt->bind_param("ssi", $status, $rejection_reason, $note_id);
+            $update_stmt->execute();
+            if ($update_stmt->affected_rows >= 0 && $note_details) {
+                send_template_email('note_rejected', $note_details['seller_email'], [
+                    'seller_name' => $note_details['seller_name'],
+                    'note_title' => $note_details['title'],
+                    'reason' => $rejection_reason,
+                ]);
+            }
+            $message = "Note rejected successfully.";
+        }
+    } else {
+        $update_stmt = $conn->prepare("UPDATE notes SET status = ? WHERE id = ?");
+        $update_stmt->bind_param("si", $status, $note_id);
+        $update_stmt->execute();
 
-    if ($update_stmt->affected_rows >= 0 && $note_details) {
-        if ($action === 'approve') {
+        if ($update_stmt->affected_rows >= 0 && $note_details) {
             send_template_email('note_approved', $note_details['seller_email'], [
                 'seller_name' => $note_details['seller_name'],
                 'note_title' => $note_details['title'],
             ]);
-        } else {
-            send_template_email('note_rejected', $note_details['seller_email'], [
-                'seller_name' => $note_details['seller_name'],
-                'note_title' => $note_details['title'],
-                'reason' => 'The uploaded note did not meet our platform guidelines. Please update and resubmit.',
-            ]);
+        }
+        $message = "Note " . ($action == 'approve' ? 'approved' : 'rejected') . " successfully.";
+    }
+}
+
+// Handle other admin actions
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    if ($action == 'add_university') {
+        $name = trim($_POST['name']);
+        $type = $_POST['type'];
+        $stmt = $conn->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
+        $stmt->bind_param("ss", $name, $type);
+        $stmt->execute();
+        $message = "University added.";
+    } elseif ($action == 'delete_university') {
+        $id = (int)$_POST['id'];
+        $stmt = $conn->prepare("DELETE FROM universities WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $message = "University deleted.";
+    } elseif ($action == 'add_module') {
+        $university_id = (int)$_POST['university_id'];
+        $module_code = trim($_POST['module_code']);
+        $module_name = trim($_POST['module_name']);
+        $stmt = $conn->prepare("INSERT INTO modules (university_id, module_code, module_name) VALUES (?, ?, ?)");
+        $stmt->bind_param("iss", $university_id, $module_code, $module_name);
+        $stmt->execute();
+        $message = "Module added.";
+    } elseif ($action == 'import_modules') {
+        if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] == 0) {
+            $file = $_FILES['csv_file']['tmp_name'];
+            $handle = fopen($file, 'r');
+            while (($data = fgetcsv($handle, 1000, ',')) !== FALSE) {
+                $uni_name = trim($data[0]);
+                $module_code = trim($data[1]);
+                $module_name = trim($data[2]);
+                // Get university id
+                $uni_stmt = $conn->prepare("SELECT id FROM universities WHERE name = ?");
+                $uni_stmt->bind_param("s", $uni_name);
+                $uni_stmt->execute();
+                $uni_result = $uni_stmt->get_result();
+                if ($uni_result->num_rows > 0) {
+                    $uni_id = $uni_result->fetch_assoc()['id'];
+                    $stmt = $conn->prepare("INSERT INTO modules (university_id, module_code, module_name) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE module_name = VALUES(module_name)");
+                    $stmt->bind_param("iss", $uni_id, $module_code, $module_name);
+                    $stmt->execute();
+                }
+            }
+            fclose($handle);
+            $message = "Modules imported.";
         }
     }
-
-    $message = "Note " . ($action == 'approve' ? 'approved' : 'rejected') . " successfully.";
 }
 
 // Get pending notes
@@ -81,6 +141,17 @@ $pending_withdrawals = $pending_withdrawals_stmt->get_result()->fetch_assoc()['p
 $platform_revenue_stmt = $conn->prepare("SELECT COALESCE(SUM(commission_amount), 0) AS platform_revenue FROM seller_earnings");
 $platform_revenue_stmt->execute();
 $platform_revenue = $platform_revenue_stmt->get_result()->fetch_assoc()['platform_revenue'] ?? 0;
+
+// Get rejected notes
+$rejected_stmt = $conn->prepare("
+    SELECT n.*, u.name as seller_name, u.email as seller_email
+    FROM notes n
+    JOIN users u ON n.seller_id = u.id
+    WHERE n.status = 'rejected'
+    ORDER BY n.created_at DESC
+");
+$rejected_stmt->execute();
+$rejected_notes = $rejected_stmt->get_result();
 
 // Get user activity data
 $user_activity_stmt = $conn->prepare("
@@ -175,8 +246,7 @@ $chart_values = json_encode(array_map(function ($item) {
 <!-- Tab Navigation -->
 <div class="mb-6">
     <nav class="flex space-x-4" aria-label="Tabs">
-        <button onclick="showTab('pending')" class="tab-button active bg-blue-600 text-white px-4 py-2 rounded-md" data-tab="pending">Pending Notes</button>
-        <button onclick="showTab('users')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="users">User Activity</button>
+        <button onclick="showTab('pending')" class="tab-button active bg-blue-600 text-white px-4 py-2 rounded-md" data-tab="pending">Pending Notes</button>        <button onclick="showTab('rejected')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="rejected">Rejected Notes</button>        <button onclick="showTab('users')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="users">User Activity</button>
         <button onclick="showTab('reports')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="reports">Sales Reports</button>
         <button onclick="showTab('categories')" class="tab-button bg-gray-200 text-gray-700 px-4 py-2 rounded-md" data-tab="categories">Manage Categories</button>
         <a href="paystack-dashboard.php" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Paystack Dashboard</a>
@@ -226,11 +296,7 @@ $chart_values = json_encode(array_map(function ($item) {
                                         <input type="hidden" name="action" value="approve">
                                         <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition duration-300 mr-2">Approve</button>
                                     </form>
-                                    <form method="POST" class="inline">
-                                        <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
-                                        <input type="hidden" name="action" value="reject">
-                                        <button type="submit" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition duration-300">Reject</button>
-                                    </form>
+                                    <button type="button" onclick="openRejectModal(<?php echo $note['id']; ?>)" class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition duration-300">Reject</button>
                                 </td>
                             </tr>
                         <?php endwhile; ?>
@@ -245,7 +311,53 @@ $chart_values = json_encode(array_map(function ($item) {
     </div>
 </div>
 
-<!-- User Activity Tab -->
+<!-- Rejected Notes Tab -->
+<div id="rejected-tab" class="tab-content hidden">
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold">Rejected Notes (<?php echo $rejected_notes->num_rows; ?>)</h2>
+        </div>
+
+        <?php if ($rejected_notes->num_rows > 0): ?>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Module</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rejection Reason</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rejected At</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php while ($note = $rejected_notes->fetch_assoc()): ?>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($note['title']); ?></div>
+                                    <div class="text-sm text-gray-500"><?php echo htmlspecialchars(substr($note['description'], 0, 50)) . (strlen($note['description']) > 50 ? '...' : ''); ?></div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['module_code']); ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['university']); ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm text-gray-900"><?php echo htmlspecialchars($note['seller_name']); ?></div>
+                                    <div class="text-sm text-gray-500"><?php echo htmlspecialchars($note['seller_email']); ?></div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?php echo htmlspecialchars($note['rejection_reason'] ?? 'No reason provided'); ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><?php echo date('M j, Y H:i', strtotime($note['created_at'])); ?></td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
+            <div class="px-6 py-8 text-center">
+                <p class="text-gray-500">No rejected notes.</p>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
 <div id="users-tab" class="tab-content hidden">
     <div class="bg-white rounded-lg shadow-md overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200">
@@ -343,9 +455,108 @@ $chart_values = json_encode(array_map(function ($item) {
 <div id="categories-tab" class="tab-content hidden">
     <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-xl font-semibold mb-4">Manage Universities & Modules</h2>
-        <p class="text-gray-600 mb-4">Currently, universities and modules are entered freely by sellers. To manage them centrally, we can add predefined lists in the future.</p>
-        <p class="text-gray-600">For now, monitor the variety in the User Activity and Sales Reports tabs.</p>
-        <!-- Placeholder for future CRUD functionality -->
+        
+        <!-- Add University Form -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-2">Add University</h3>
+            <form method="POST" class="flex gap-4">
+                <input type="hidden" name="action" value="add_university">
+                <input type="text" name="name" placeholder="University Name" required class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+                <select name="type" required class="px-3 py-2 border border-gray-300 rounded-lg">
+                    <option value="university">University</option>
+                    <option value="college">College</option>
+                    <option value="tvet">TVET</option>
+                </select>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add</button>
+            </form>
+        </div>
+        
+        <!-- Universities List -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-2">Universities</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Name</th>
+                            <th class="px-4 py-2 text-left">Type</th>
+                            <th class="px-4 py-2 text-left">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $uni_stmt = $conn->prepare("SELECT * FROM universities ORDER BY name");
+                        $uni_stmt->execute();
+                        $unis = $uni_stmt->get_result();
+                        while ($uni = $unis->fetch_assoc()): ?>
+                            <tr>
+                                <td class="px-4 py-2"><?php echo htmlspecialchars($uni['name']); ?></td>
+                                <td class="px-4 py-2"><?php echo htmlspecialchars($uni['type']); ?></td>
+                                <td class="px-4 py-2">
+                                    <form method="POST" class="inline">
+                                        <input type="hidden" name="action" value="delete_university">
+                                        <input type="hidden" name="id" value="<?php echo $uni['id']; ?>">
+                                        <button type="submit" onclick="return confirm('Delete this university?')" class="text-red-600 hover:text-red-800">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Add Module Form -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-2">Add Module</h3>
+            <form method="POST" class="flex gap-4">
+                <input type="hidden" name="action" value="add_module">
+                <select name="university_id" required class="px-3 py-2 border border-gray-300 rounded-lg">
+                    <option value="">Select University</option>
+                    <?php
+                    $uni_stmt->execute();
+                    $unis = $uni_stmt->get_result();
+                    while ($uni = $unis->fetch_assoc()): ?>
+                        <option value="<?php echo $uni['id']; ?>"><?php echo htmlspecialchars($uni['name']); ?></option>
+                    <?php endwhile; ?>
+                </select>
+                <input type="text" name="module_code" placeholder="Module Code" required class="px-3 py-2 border border-gray-300 rounded-lg">
+                <input type="text" name="module_name" placeholder="Module Name" required class="px-3 py-2 border border-gray-300 rounded-lg">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add</button>
+            </form>
+        </div>
+        
+        <!-- Bulk Import -->
+        <div>
+            <h3 class="text-lg font-semibold mb-2">Bulk Import Modules (CSV)</h3>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="import_modules">
+                <input type="file" name="csv_file" accept=".csv" required class="mb-2">
+                <p class="text-sm text-gray-600 mb-2">CSV format: university_name,module_code,module_name</p>
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Import</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Rejection Modal -->
+<div id="rejectModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden" id="my-modal">
+    <div class="relative top-20 mx-auto w-full max-w-md p-5 border shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+            <h3 class="text-lg font-medium text-gray-900" id="modal-title">Reject Note</h3>
+            <div class="mt-2 px-7 py-3">
+                <form method="POST" id="rejectForm">
+                    <input type="hidden" name="action" value="reject">
+                    <input type="hidden" name="note_id" id="rejectNoteId" value="">
+                    <label for="rejection_reason" class="block text-sm font-medium text-gray-700 text-left">Rejection Reason (Required)</label>
+                    <textarea name="rejection_reason" id="rejection_reason" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required></textarea>
+                    <div class="flex items-center px-4 py-3">
+                        <button type="button" onclick="closeRejectModal()" class="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 mr-2">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">Reject Note</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -367,6 +578,16 @@ function showTab(tabName) {
     const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
     activeButton.classList.add('active', 'bg-blue-600', 'text-white');
     activeButton.classList.remove('bg-gray-200', 'text-gray-700');
+}
+
+function openRejectModal(noteId) {
+    document.getElementById('rejectNoteId').value = noteId;
+    document.getElementById('rejectModal').classList.remove('hidden');
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').classList.add('hidden');
+    document.getElementById('rejection_reason').value = '';
 }
 </script>
 

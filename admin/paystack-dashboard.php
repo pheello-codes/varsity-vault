@@ -91,9 +91,9 @@ if (!empty($balanceData['available']) && is_array($balanceData['available'])) {
         <h1 class="text-3xl font-bold text-gray-900">Paystack Dashboard</h1>
         <p class="text-gray-600 mt-2">Monitor transfers, balance, and seller payouts.</p>
     </div>
-    <div class="space-x-2">
-        <a href="../admin/index.php" class="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300">Back to Admin</a>
-        <a href="?export_csv=1" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Export EFT CSV</a>
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <a href="../admin/index.php" class="w-full sm:w-auto bg-gray-200 text-gray-800 px-4 py-3 rounded hover:bg-gray-300 text-center">Back to Admin</a>
+        <a href="?export_csv=1" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 text-center">Export EFT CSV</a>
     </div>
 </div>
 

@@ -52,7 +52,6 @@ if (!$verifyResult['status']) {
                 $item['quantity'] = $quantity;
                 $validItems[] = $item;
                 $totalExpected += $item['price'] * $quantity;
-                }
             }
 
             if ((int) round($totalExpected * 100) !== $amountPaid) {
