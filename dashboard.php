@@ -9,23 +9,32 @@ $messages = [];
 
 // Handle note deletion
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'delete') {
-    $note_id = (int)$_POST['note_id'];
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
+    } else {
+        $note_id = (int)$_POST['note_id'];
 
-    $verify_stmt = $conn->prepare("SELECT seller_id FROM notes WHERE id = ?");
-    $verify_stmt->bind_param("i", $note_id);
-    $verify_stmt->execute();
-    $result = $verify_stmt->get_result();
-    $note = $result->fetch_assoc();
+        $verify_stmt = $conn->prepare("SELECT seller_id FROM notes WHERE id = ?");
+        $verify_stmt->bind_param("i", $note_id);
+        $verify_stmt->execute();
+        $result = $verify_stmt->get_result();
+        $note = $result->fetch_assoc();
 
-    if ($note && $note['seller_id'] == $_SESSION['user_id']) {
-        $delete_stmt = $conn->prepare("DELETE FROM notes WHERE id = ?");
-        $delete_stmt->bind_param("i", $note_id);
-        $delete_stmt->execute();
+        if ($note && $note['seller_id'] == $_SESSION['user_id']) {
+            $delete_stmt = $conn->prepare("DELETE FROM notes WHERE id = ?");
+            $delete_stmt->bind_param("i", $note_id);
+            $delete_stmt->execute();
 
-        $conn->query("DELETE FROM purchases WHERE note_id = $note_id");
-        $conn->query("DELETE FROM reviews WHERE note_id = $note_id");
+            $delete_purchases = $conn->prepare("DELETE FROM purchases WHERE note_id = ?");
+            $delete_purchases->bind_param("i", $note_id);
+            $delete_purchases->execute();
 
-        $messages[] = "Note deleted successfully.";
+            $delete_reviews = $conn->prepare("DELETE FROM reviews WHERE note_id = ?");
+            $delete_reviews->bind_param("i", $note_id);
+            $delete_reviews->execute();
+
+            $messages[] = "Note deleted successfully.";
+        }
     }
 }
 
@@ -36,7 +45,10 @@ $bank_info = $user_detail_stmt->get_result()->fetch_assoc();
 
 // Handle withdrawal request
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'request_withdrawal') {
-    $earnings_stmt = $conn->prepare("SELECT COALESCE(SUM(seller_amount), 0) AS total_earned FROM seller_earnings WHERE seller_id = ?");
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
+    } else {
+        $earnings_stmt = $conn->prepare("SELECT COALESCE(SUM(seller_amount), 0) AS total_earned FROM seller_earnings WHERE seller_id = ?");
     $earnings_stmt->bind_param("i", $_SESSION['user_id']);
     $earnings_stmt->execute();
     $total_earned = $earnings_stmt->get_result()->fetch_assoc()['total_earned'];
@@ -102,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             }
         }
     }
+}
 }
 
 // Get user's purchases
@@ -195,6 +208,7 @@ $listings = $listing_stmt->get_result();
             <?php endif; ?>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <input type="hidden" name="action" value="request_withdrawal">
                 <button type="submit" class="w-full <?php echo (empty($bank_info['recipient_code']) || $available_balance < 100) ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'; ?> text-white px-6 py-3 rounded-lg transition duration-300" <?php echo (empty($bank_info['recipient_code']) || $available_balance < 100) ? 'disabled' : ''; ?>>
                     Request Withdrawal
@@ -297,6 +311,7 @@ $listings = $listing_stmt->get_result();
                         <?php endif; ?>
                         <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                             <form method="POST" class="w-full sm:w-auto" onsubmit="return confirm('Are you sure you want to delete this note? This action cannot be undone.');">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="note_id" value="<?php echo $listing['id']; ?>">
                                 <button type="submit" class="w-full sm:w-auto bg-red-600 text-white px-4 py-3 rounded-lg text-sm hover:bg-red-700 transition duration-300">Delete</button>

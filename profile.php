@@ -23,80 +23,84 @@ if ($bankListResult['status']) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = trim($_POST['name']);
-    $email = trim($_POST['email']);
-    $current_password = $_POST['current_password'];
-    $new_password = $_POST['new_password'];
-    $confirm_password = $_POST['confirm_password'];
-    $bank_code = trim($_POST['bank_code']);
-    $account_number = trim($_POST['account_number']);
-    $account_name = trim($_POST['account_name']);
-    $recipient_code = $user['recipient_code'];
-
-    // Validate inputs
-    if (empty($name) || empty($email)) {
-        $errors[] = "Name and email are required.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format.";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
     } else {
-        $email_check_stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-        $email_check_stmt->bind_param("si", $email, $_SESSION['user_id']);
-        $email_check_stmt->execute();
+        $name = trim($_POST['name']);
+        $email = trim($_POST['email']);
+        $current_password = $_POST['current_password'];
+        $new_password = $_POST['new_password'];
+        $confirm_password = $_POST['confirm_password'];
+        $bank_code = trim($_POST['bank_code']);
+        $account_number = trim($_POST['account_number']);
+        $account_name = trim($_POST['account_name']);
+        $recipient_code = $user['recipient_code'];
 
-        if ($email_check_stmt->get_result()->num_rows > 0) {
-            $errors[] = "Email already taken.";
+        // Validate inputs
+        if (empty($name) || empty($email)) {
+            $errors[] = "Name and email are required.";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email format.";
         } else {
-            if (!empty($bank_code) && !empty($account_number)) {
-                $recipientResult = createTransferRecipient($name, $account_number, $bank_code);
-                if ($recipientResult['status']) {
-                    $recipient_code = $recipientResult['data']['recipient_code'] ?? $recipient_code;
-                    $account_name = $recipientResult['data']['details']['account_name'] ?? $account_name;
-                } else {
-                    $errors[] = 'Paystack recipient creation failed: ' . htmlspecialchars($recipientResult['message']);
-                }
-            }
+            $email_check_stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+            $email_check_stmt->bind_param("si", $email, $_SESSION['user_id']);
+            $email_check_stmt->execute();
 
-            if (empty($errors)) {
-                $update_stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, bank_code = ?, account_number = ?, account_name = ?, recipient_code = ? WHERE id = ?");
-                $update_stmt->bind_param("ssssssi", $name, $email, $bank_code, $account_number, $account_name, $recipient_code, $_SESSION['user_id']);
-                $update_stmt->execute();
-
-                if (!empty($new_password)) {
-                    if (empty($current_password)) {
-                        $errors[] = "Current password is required to change password.";
-                    } elseif (strlen($new_password) < 6) {
-                        $errors[] = "New password must be at least 6 characters long.";
-                    } elseif ($new_password !== $confirm_password) {
-                        $errors[] = "New passwords do not match.";
+            if ($email_check_stmt->get_result()->num_rows > 0) {
+                $errors[] = "Email already taken.";
+            } else {
+                if (!empty($bank_code) && !empty($account_number)) {
+                    $recipientResult = createTransferRecipient($name, $account_number, $bank_code);
+                    if ($recipientResult['status']) {
+                        $recipient_code = $recipientResult['data']['recipient_code'] ?? $recipient_code;
+                        $account_name = $recipientResult['data']['details']['account_name'] ?? $account_name;
                     } else {
-                        $password_stmt = $conn->prepare("SELECT password FROM users WHERE id = ?");
-                        $password_stmt->bind_param("i", $_SESSION['user_id']);
-                        $password_stmt->execute();
-                        $current_hash = $password_stmt->get_result()->fetch_assoc()['password'];
-
-                        if (!password_verify($current_password, $current_hash)) {
-                            $errors[] = "Current password is incorrect.";
-                        } else {
-                            $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
-                            $password_update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
-                            $password_update_stmt->bind_param("si", $new_hash, $_SESSION['user_id']);
-                            $password_update_stmt->execute();
-                        }
+                        $errors[] = 'Paystack recipient creation failed: ' . htmlspecialchars($recipientResult['message']);
                     }
                 }
 
                 if (empty($errors)) {
-                    $success = true;
-                    $_SESSION['user_name'] = $name;
-                    $_SESSION['user_email'] = $email;
-                    $user = [
-                        'name' => $name,
-                        'email' => $email,
-                        'bank_code' => $bank_code,
-                        'account_number' => $account_number,
-                        'account_name' => $account_name,
-                        'recipient_code' => $recipient_code
-                    ];
+                    $update_stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, bank_code = ?, account_number = ?, account_name = ?, recipient_code = ? WHERE id = ?");
+                    $update_stmt->bind_param("ssssssi", $name, $email, $bank_code, $account_number, $account_name, $recipient_code, $_SESSION['user_id']);
+                    $update_stmt->execute();
+
+                    if (!empty($new_password)) {
+                        if (empty($current_password)) {
+                            $errors[] = "Current password is required to change password.";
+                        } elseif (strlen($new_password) < 6) {
+                            $errors[] = "New password must be at least 6 characters long.";
+                        } elseif ($new_password !== $confirm_password) {
+                            $errors[] = "New passwords do not match.";
+                        } else {
+                            $password_stmt = $conn->prepare("SELECT password FROM users WHERE id = ?");
+                            $password_stmt->bind_param("i", $_SESSION['user_id']);
+                            $password_stmt->execute();
+                            $current_hash = $password_stmt->get_result()->fetch_assoc()['password'];
+
+                            if (!password_verify($current_password, $current_hash)) {
+                                $errors[] = "Current password is incorrect.";
+                            } else {
+                                $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+                                $password_update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+                                $password_update_stmt->bind_param("si", $new_hash, $_SESSION['user_id']);
+                                $password_update_stmt->execute();
+                            }
+                        }
+                    }
+
+                    if (empty($errors)) {
+                        $success = true;
+                        $_SESSION['user_name'] = $name;
+                        $_SESSION['user_email'] = $email;
+                        $user = [
+                            'name' => $name,
+                            'email' => $email,
+                            'bank_code' => $bank_code,
+                            'account_number' => $account_number,
+                            'account_name' => $account_name,
+                            'recipient_code' => $recipient_code
+                        ];
+                    }
                 }
             }
         }
@@ -127,6 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <div class="bg-white rounded-lg shadow-md p-6">
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
             <div class="mb-4">
                 <label for="name" class="block text-gray-700 font-semibold mb-2">Full Name *</label>
                 <input type="text" id="name" name="name" value="<?php echo htmlspecialchars($user['name'] ?? ''); ?>" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">

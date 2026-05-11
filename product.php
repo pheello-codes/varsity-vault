@@ -66,6 +66,9 @@ if (isset($_GET['error'])) {
         case 'already_reviewed':
             $errors[] = 'You have already reviewed this note.';
             break;
+        case 'invalid_csrf':
+            $errors[] = 'Invalid session token. Please refresh the page and try again.';
+            break;
         case 'review_failed':
             $errors[] = 'Failed to submit review. Please try again.';
             break;
@@ -186,6 +189,7 @@ if (isset($_GET['success']) && $_GET['success'] == 'review_added') {
         <div class="mt-8 border-t pt-6">
             <h3 class="text-xl font-semibold mb-4">Write a Review</h3>
             <form method="POST" action="review.php">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <input type="hidden" name="note_id" value="<?php echo $note_id; ?>">
                 <div class="mb-4">
                     <label class="block text-gray-700 mb-2">Rating</label>

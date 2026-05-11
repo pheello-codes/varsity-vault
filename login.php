@@ -5,33 +5,37 @@ include 'includes/config.php';
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $email = trim($_POST['email']);
-    $password = $_POST['password'];
-
-    if (empty($email) || empty($password)) {
-        $errors[] = "All fields are required.";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
     } else {
-        // Check user credentials
-        $stmt = $conn->prepare("SELECT id, password, name FROM users WHERE email = ?");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $result = $stmt->get_result();
+        $email = trim($_POST['email']);
+        $password = $_POST['password'];
 
-        if ($result->num_rows == 1) {
-            $user = $result->fetch_assoc();
-            if (password_verify($password, $user['password'])) {
-                // Login successful
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['name'];
-                $_SESSION['user_email'] = $email;
+        if (empty($email) || empty($password)) {
+            $errors[] = "All fields are required.";
+        } else {
+            // Check user credentials
+            $stmt = $conn->prepare("SELECT id, password, name FROM users WHERE email = ?");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            $result = $stmt->get_result();
 
-                header("Location: dashboard.php");
-                exit();
+            if ($result->num_rows == 1) {
+                $user = $result->fetch_assoc();
+                if (password_verify($password, $user['password'])) {
+                    // Login successful
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['user_name'] = $user['name'];
+                    $_SESSION['user_email'] = $email;
+
+                    header("Location: dashboard.php");
+                    exit();
+                } else {
+                    $errors[] = "Invalid email or password.";
+                }
             } else {
                 $errors[] = "Invalid email or password.";
             }
-        } else {
-            $errors[] = "Invalid email or password.";
         }
     }
 }
@@ -54,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <div class="bg-white rounded-lg shadow-md p-6">
         <form method="POST" onsubmit="return validateLoginForm()">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
             <div class="mb-4">
                 <label for="email" class="block text-gray-700 font-semibold mb-2">Email *</label>
                 <input type="email" id="email" name="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">

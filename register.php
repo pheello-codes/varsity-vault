@@ -6,40 +6,44 @@ $errors = [];
 $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $name = trim($_POST['name']);
-    $email = trim($_POST['email']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-
-    // Validate inputs
-    if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
-        $errors[] = "All fields are required.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format.";
-    } elseif (strlen($password) < 6) {
-        $errors[] = "Password must be at least 6 characters long.";
-    } elseif ($password !== $confirm_password) {
-        $errors[] = "Passwords do not match.";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
     } else {
-        // Check if email already exists
-        $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
+        $name = trim($_POST['name']);
+        $email = trim($_POST['email']);
+        $password = $_POST['password'];
+        $confirm_password = $_POST['confirm_password'];
 
-        if ($stmt->get_result()->num_rows > 0) {
-            $errors[] = "Email already registered.";
+        // Validate inputs
+        if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
+            $errors[] = "All fields are required.";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email format.";
+        } elseif (strlen($password) < 6) {
+            $errors[] = "Password must be at least 6 characters long.";
+        } elseif ($password !== $confirm_password) {
+            $errors[] = "Passwords do not match.";
         } else {
-            // Hash password
-            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            // Check if email already exists
+            $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
 
-            // Insert new user
-            $insert_stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
-            $insert_stmt->bind_param("sss", $name, $email, $hashed_password);
-
-            if ($insert_stmt->execute()) {
-                $success = true;
+            if ($stmt->get_result()->num_rows > 0) {
+                $errors[] = "Email already registered.";
             } else {
-                $errors[] = "Registration failed. Please try again.";
+                // Hash password
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+                // Insert new user
+                $insert_stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
+                $insert_stmt->bind_param("sss", $name, $email, $hashed_password);
+
+                if ($insert_stmt->execute()) {
+                    $success = true;
+                } else {
+                    $errors[] = "Registration failed. Please try again.";
+                }
             }
         }
     }
@@ -68,8 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <?php endif; ?>
 
     <div class="bg-white rounded-lg shadow-md p-6">
-        <form method="POST" onsubmit="return validateRegistrationForm()">
-            <div class="mb-4">
+        <form method="POST" onsubmit="return validateRegistrationForm()">            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">            <div class="mb-4">
                 <label for="name" class="block text-gray-700 font-semibold mb-2">Full Name *</label>
                 <input type="text" id="name" name="name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
             </div>

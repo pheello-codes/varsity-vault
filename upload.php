@@ -18,6 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $price = trim($_POST['price']);
     $description = trim($_POST['description']);
 
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
+    }
+
     // Validate inputs
     if (empty($title)) $errors[] = "Title is required.";
     if (empty($module_code)) $errors[] = "Module code is required.";
@@ -27,10 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Handle file upload
     if (isset($_FILES['pdf_file']) && $_FILES['pdf_file']['error'] == 0) {
         $file = $_FILES['pdf_file'];
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
 
-        // Check file type
-        $allowed_types = ['application/pdf'];
-        if (!in_array($file['type'], $allowed_types)) {
+        if ($extension !== 'pdf') {
             $errors[] = "Only PDF files are allowed.";
         }
 
@@ -40,12 +43,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         if (empty($errors)) {
-            // Generate unique filename
-            $filename = uniqid() . '_' . preg_replace("/[^a-zA-Z0-9.]/", "", basename($file['name']));
-            $filepath = 'uploads/notes/' . $filename;
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+            if ($finfo) {
+                finfo_close($finfo);
+            }
+
+            if ($mimeType !== 'application/pdf') {
+                $errors[] = "Uploaded file does not appear to be a valid PDF.";
+            } else {
+                $handle = fopen($file['tmp_name'], 'rb');
+                if ($handle) {
+                    $header = fread($handle, 4);
+                    fclose($handle);
+                    if ($header !== '%PDF') {
+                        $errors[] = "Uploaded file is not a valid PDF file.";
+                    }
+                } else {
+                    $errors[] = "Uploaded file could not be read.";
+                }
+            }
+        }
+
+        if (empty($errors)) {
+            if (!is_dir(UPLOADS_NOTES_DIR)) {
+                mkdir(UPLOADS_NOTES_DIR, 0755, true);
+            }
+
+            $filename = bin2hex(random_bytes(16)) . '_' . preg_replace("/[^a-zA-Z0-9.]/", "", basename($file['name']));
+            $filepath = UPLOADS_NOTES_RELATIVE_PATH . '/' . $filename;
+            $storagePath = UPLOADS_NOTES_DIR . '/' . $filename;
 
             // Move uploaded file
-            if (move_uploaded_file($file['tmp_name'], $filepath)) {
+            if (move_uploaded_file($file['tmp_name'], $storagePath)) {
                 // Insert into database
                 $stmt = $conn->prepare("INSERT INTO notes (title, module_code, university, price, description, file_path, seller_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')");
                 $stmt->bind_param("ssssssi", $title, $module_code, $university, $price, $description, $filepath, $_SESSION['user_id']);
@@ -55,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 } else {
                     $errors[] = "Database error: " . $conn->error;
                     // Delete uploaded file if DB insert failed
-                    unlink($filepath);
+                    @unlink($storagePath);
                 }
             } else {
                 $errors[] = "Failed to upload file.";
@@ -90,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <div class="bg-white rounded-lg shadow-md p-6">
         <form method="POST" enctype="multipart/form-data" onsubmit="return validateUploadForm()" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
             <div>
                 <label for="title" class="block text-gray-700 font-semibold mb-2">Title *</label>
                 <input type="text" id="title" name="title" required class="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">

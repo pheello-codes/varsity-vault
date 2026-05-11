@@ -8,7 +8,9 @@ $cartErrors = [];
 
 // Handle add to cart
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
-    if (!$cartTableExists) {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $cartErrors[] = 'Invalid session token. Please refresh the page and try again.';
+    } elseif (!$cartTableExists) {
         $cartErrors[] = 'Shopping cart is temporarily unavailable. Please try again later.';
     } else {
         if ($_POST['action'] == 'add_to_cart') {
@@ -134,6 +136,7 @@ if ($cartTableExists && $cart_items) {
                         <div class="flex flex-col gap-3 items-start sm:items-end">
                             <div class="flex items-center gap-2">
                                 <form method="POST" class="inline-flex">
+                                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                     <input type="hidden" name="action" value="update_quantity">
                                     <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
                                     <input type="hidden" name="quantity" value="<?php echo max(1, $item['quantity'] - 1); ?>">
@@ -141,6 +144,7 @@ if ($cartTableExists && $cart_items) {
                                 </form>
                                 <span class="min-w-[44px] text-center text-lg font-semibold"><?php echo $item['quantity']; ?></span>
                                 <form method="POST" class="inline-flex">
+                                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                     <input type="hidden" name="action" value="update_quantity">
                                     <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
                                     <input type="hidden" name="quantity" value="<?php echo $item['quantity'] + 1; ?>">
@@ -149,6 +153,7 @@ if ($cartTableExists && $cart_items) {
                             </div>
                             <span class="text-xl font-bold text-blue-600">R<?php echo number_format($item_total, 2); ?></span>
                             <form method="POST" class="inline">
+                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                 <input type="hidden" name="action" value="remove_from_cart">
                                 <input type="hidden" name="note_id" value="<?php echo $item['note_id']; ?>">
                                 <button type="submit" class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg transition duration-300">Remove</button>
@@ -166,6 +171,7 @@ if ($cartTableExists && $cart_items) {
                     <span class="text-blue-600">R<?php echo number_format($total, 2); ?></span>
                 </div>
                 <form method="POST" action="checkout.php">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                     <button type="submit" class="w-full bg-green-600 text-white px-8 py-4 rounded-lg hover:bg-green-700 transition duration-300 text-lg font-semibold">
                         Proceed to Checkout
                     </button>

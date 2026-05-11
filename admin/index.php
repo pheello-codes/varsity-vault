@@ -27,8 +27,11 @@ if (!$user['is_admin']) {
 
 // Handle approve/reject actions
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_POST['note_id'])) {
-    $action = $_POST['action'];
-    $note_id = (int)$_POST['note_id'];
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $message = 'Invalid session token. Please refresh the page and try again.';
+    } else {
+        $action = $_POST['action'];
+        $note_id = (int)$_POST['note_id'];
 
     $status = ($action == 'approve') ? 'approved' : 'rejected';
 
@@ -68,11 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
         $message = "Note " . ($action == 'approve' ? 'approved' : 'rejected') . " successfully.";
     }
 }
+}
 
 // Handle other admin actions
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
-    $action = $_POST['action'];
-    if ($action == 'add_university') {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $message = 'Invalid session token. Please refresh the page and try again.';
+    } else {
+        $action = $_POST['action'];
+        if ($action == 'add_university') {
         $name = trim($_POST['name']);
         $type = $_POST['type'];
         $stmt = $conn->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
@@ -117,6 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $message = "Modules imported.";
         }
     }
+}
+
 }
 
 // Get pending notes
@@ -292,6 +301,7 @@ $chart_values = json_encode(array_map(function ($item) {
                                         <a href="../download.php?note_id=<?php echo $note['id']; ?>" target="_blank" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition duration-300 inline-block mr-2">View PDF</a>
                                     <?php endif; ?>
                                     <form method="POST" class="inline">
+                                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                         <input type="hidden" name="note_id" value="<?php echo $note['id']; ?>">
                                         <input type="hidden" name="action" value="approve">
                                         <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition duration-300 mr-2">Approve</button>
@@ -460,6 +470,7 @@ $chart_values = json_encode(array_map(function ($item) {
         <div class="mb-6">
             <h3 class="text-lg font-semibold mb-2">Add University</h3>
             <form method="POST" class="flex gap-4">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <input type="hidden" name="action" value="add_university">
                 <input type="text" name="name" placeholder="University Name" required class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
                 <select name="type" required class="px-3 py-2 border border-gray-300 rounded-lg">
@@ -494,6 +505,7 @@ $chart_values = json_encode(array_map(function ($item) {
                                 <td class="px-4 py-2"><?php echo htmlspecialchars($uni['type']); ?></td>
                                 <td class="px-4 py-2">
                                     <form method="POST" class="inline">
+                                        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                                         <input type="hidden" name="action" value="delete_university">
                                         <input type="hidden" name="id" value="<?php echo $uni['id']; ?>">
                                         <button type="submit" onclick="return confirm('Delete this university?')" class="text-red-600 hover:text-red-800">Delete</button>
@@ -510,6 +522,7 @@ $chart_values = json_encode(array_map(function ($item) {
         <div class="mb-6">
             <h3 class="text-lg font-semibold mb-2">Add Module</h3>
             <form method="POST" class="flex gap-4">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <input type="hidden" name="action" value="add_module">
                 <select name="university_id" required class="px-3 py-2 border border-gray-300 rounded-lg">
                     <option value="">Select University</option>
@@ -530,6 +543,7 @@ $chart_values = json_encode(array_map(function ($item) {
         <div>
             <h3 class="text-lg font-semibold mb-2">Bulk Import Modules (CSV)</h3>
             <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <input type="hidden" name="action" value="import_modules">
                 <input type="file" name="csv_file" accept=".csv" required class="mb-2">
                 <p class="text-sm text-gray-600 mb-2">CSV format: university_name,module_code,module_name</p>
@@ -546,6 +560,7 @@ $chart_values = json_encode(array_map(function ($item) {
             <h3 class="text-lg font-medium text-gray-900" id="modal-title">Reject Note</h3>
             <div class="mt-2 px-7 py-3">
                 <form method="POST" id="rejectForm">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                     <input type="hidden" name="action" value="reject">
                     <input type="hidden" name="note_id" id="rejectNoteId" value="">
                     <label for="rejection_reason" class="block text-sm font-medium text-gray-700 text-left">Rejection Reason (Required)</label>

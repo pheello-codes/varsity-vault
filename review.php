@@ -8,6 +8,11 @@ if (!isset($_POST['note_id']) || !is_numeric($_POST['note_id'])) {
 }
 
 $note_id = (int)$_POST['note_id'];
+if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+    header("Location: product.php?id=$note_id&error=invalid_csrf");
+    exit();
+}
+
 $rating = (int)$_POST['rating'];
 $comment = trim($_POST['comment']);
 

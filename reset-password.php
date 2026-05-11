@@ -21,26 +21,30 @@ if (!$token_data) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
-    $password = $_POST['password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
-
-    if (empty($password) || empty($confirm_password)) {
-        $errors[] = 'Please enter and confirm your new password.';
-    } elseif (strlen($password) < 8) {
-        $errors[] = 'Password must be at least 8 characters long.';
-    } elseif ($password !== $confirm_password) {
-        $errors[] = 'Passwords do not match.';
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
     } else {
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        $update = $conn->prepare('UPDATE users SET password = ? WHERE email = ?');
-        $update->bind_param('ss', $hashed_password, $token_data['email']);
-        $update->execute();
+        $password = $_POST['password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
 
-        $delete = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
-        $delete->bind_param('s', $token_data['email']);
-        $delete->execute();
+        if (empty($password) || empty($confirm_password)) {
+            $errors[] = 'Please enter and confirm your new password.';
+        } elseif (strlen($password) < 8) {
+            $errors[] = 'Password must be at least 8 characters long.';
+        } elseif ($password !== $confirm_password) {
+            $errors[] = 'Passwords do not match.';
+        } else {
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            $update = $conn->prepare('UPDATE users SET password = ? WHERE email = ?');
+            $update->bind_param('ss', $hashed_password, $token_data['email']);
+            $update->execute();
 
-        $success = true;
+            $delete = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
+            $delete->bind_param('s', $token_data['email']);
+            $delete->execute();
+
+            $success = true;
+        }
     }
 }
 ?>
@@ -67,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)) {
 
         <div class="bg-white rounded-lg shadow-md p-6">
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <div class="mb-4">
                     <label for="password" class="block text-gray-700 font-semibold mb-2">New Password *</label>
                     <input type="password" id="password" name="password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">

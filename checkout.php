@@ -4,6 +4,11 @@ include 'includes/config.php';
 include 'includes/auth_check.php';
 include 'includes/paystack.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+    header("Location: cart.php");
+    exit();
+}
+
 // Get cart items from database
 $cart_stmt = $conn->prepare("
     SELECT ci.*, n.title, n.price, n.module_code, n.university

@@ -6,38 +6,42 @@ $errors = [];
 $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
-
-    if (empty($email)) {
-        $errors[] = 'Please enter your registered email address.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Please enter a valid email address.';
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $errors[] = 'Invalid session token. Please refresh the page and try again.';
     } else {
-        $stmt = $conn->prepare('SELECT id, name FROM users WHERE email = ?');
-        $stmt->bind_param('s', $email);
-        $stmt->execute();
-        $user = $stmt->get_result()->fetch_assoc();
+        $email = trim($_POST['email'] ?? '');
 
-        if ($user) {
-            $token = bin2hex(random_bytes(32));
-            $expires_at = date('Y-m-d H:i:s', strtotime('+1 hour'));
+        if (empty($email)) {
+            $errors[] = 'Please enter your registered email address.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Please enter a valid email address.';
+        } else {
+            $stmt = $conn->prepare('SELECT id, name FROM users WHERE email = ?');
+            $stmt->bind_param('s', $email);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
 
-            $insert = $conn->prepare('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)');
-            $insert->bind_param('sss', $email, $token, $expires_at);
-            $insert->execute();
+            if ($user) {
+                $token = bin2hex(random_bytes(32));
+                $expires_at = date('Y-m-d H:i:s', strtotime('+1 hour'));
 
-            $reset_url = SITE_URL . '/reset-password.php?token=' . urlencode($token);
-            $email_sent = send_template_email('password_reset', $email, [
-                'name' => $user['name'] ?? 'Student',
-                'reset_url' => $reset_url,
-            ]);
-            
-            if (!$email_sent) {
-                error_log("Failed to send password reset email to $email");
+                $insert = $conn->prepare('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)');
+                $insert->bind_param('sss', $email, $token, $expires_at);
+                $insert->execute();
+
+                $reset_url = SITE_URL . '/reset-password.php?token=' . urlencode($token);
+                $email_sent = send_template_email('password_reset', $email, [
+                    'name' => $user['name'] ?? 'Student',
+                    'reset_url' => $reset_url,
+                ]);
+                
+                if (!$email_sent) {
+                    error_log("Failed to send password reset email to $email");
+                }
             }
-        }
 
-        $success = true;
+            $success = true;
+        }
     }
 }
 ?>
@@ -64,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="bg-white rounded-lg shadow-md p-6">
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken()); ?>">
                 <div class="mb-4">
                     <label for="email" class="block text-gray-700 font-semibold mb-2">Email Address *</label>
                     <input type="email" id="email" name="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
